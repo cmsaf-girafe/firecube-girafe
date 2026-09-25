@@ -11,6 +11,7 @@ authors = [
 dependencies = [
     "firecube>=0.1.5",
     "xarray",
+    "netCDF4",
 ]
 
 [project.entry-points."firecube.plugins"]
