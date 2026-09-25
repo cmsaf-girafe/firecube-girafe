@@ -1,7 +1,9 @@
 """Tests for GIRAFE Ingestor"""
 
 import datetime as dt
+import json
 from importlib.metadata import entry_points
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -198,7 +200,7 @@ def get_fake_dataset(date: dt.date) -> xr.Dataset:
 
 
 @pytest.fixture
-def dates():
+def dates() -> list[dt.date]:
     return [
         dt.date(2026, 1, 1),
         dt.date(2026, 1, 2),
@@ -209,7 +211,7 @@ def dates():
 
 
 @pytest.fixture
-def encoding():
+def encoding() -> dict:
     return {
         "num_obs_fraction": {
             "zlib": True,
@@ -247,7 +249,7 @@ def encoding():
 
 
 @pytest.fixture
-def source_files(tmp_path, dates, encoding):
+def source_files(tmp_path: Path, dates: list[dt.date], encoding: dict) -> list[Path]:
     filenames = []
     for date in dates:
         filename = tmp_path / f"PREdm{date:%Y%m%d}000000120IMPGS01GL.nc"
@@ -258,12 +260,12 @@ def source_files(tmp_path, dates, encoding):
 
 
 @pytest.fixture
-def target_file(tmp_path):
+def target_file(tmp_path: Path) -> Path:
     return tmp_path / "girafe.zarr"
 
 
 @pytest.fixture
-def dataset_exp(dates):
+def dataset_exp(dates: list[dt.date]) -> xr.Dataset:
     datasets = [get_fake_dataset(date) for date in dates]
     ds = xr.concat(datasets, dim="time", coords="minimal", data_vars="minimal")
     for key in (
@@ -290,13 +292,13 @@ def dataset_exp(dates):
 
 
 @pytest.fixture(params=["maps", "timeseries", "custom"])
-def layout(request):
+def layout(request) -> str:
     return request.param
 
 
 @pytest.fixture
-def chunks_exp(layout):
-    chunks = {
+def chunks_exp(layout: str) -> dict:
+    chunks: dict[str, dict] = {
         "maps": {"time": (1, 1, 1, 1, 1), "lat": (2,), "lon": (2,), "nv": (2,)},
         "timeseries": {"time": (5,), "lat": (2,), "lon": (2,), "nv": (2,)},
         "custom": {"time": (2, 2, 1), "lat": (1, 1), "lon": (1, 1), "nv": (2,)},
@@ -304,31 +306,14 @@ def chunks_exp(layout):
     return chunks[layout]
 
 
-@pytest.fixture
-def ingest_command(tmp_path, target_file, layout):
-    layout_opts = {
-        "maps": "layout=maps",
-        "timeseries": "layout=timeseries",
-        "custom": 'zarr_chunk_shape={"time": 2, "lat": 1, "lon": 1}',
-    }
-    return [
-        "ingest",
-        "girafe",
-        "--product-name",
-        "girafe",
-        "--input-data",
-        str(tmp_path),
-        "--target",
-        f"file:///{target_file}",
-        "--write-mode",
-        "direct",
-        "--option",
-        layout_opts[layout],
-    ]
-
-
 @pytest.mark.usefixtures("source_files")
-def test_zarr_ingestion(ingest_command, target_file, dataset_exp, chunks_exp):
+def test_ingest_zarr(
+    tmp_path: Path,
+    layout: str,
+    target_file: Path,
+    dataset_exp: xr.Dataset,
+    chunks_exp: dict,
+):
     """Test zarr ingestion.
 
     Given source files
@@ -337,9 +322,80 @@ def test_zarr_ingestion(ingest_command, target_file, dataset_exp, chunks_exp):
     Then the zarr cube is identical to the original dataset
     And the chunking matches the desired layout
     """
-    runner = CliRunner()
-    res = runner.invoke(cli, ingest_command, catch_exceptions=False)
-    assert res.exit_code == 0
+    ingest(tmp_path, target_file, layout)
     with xr.open_zarr(target_file, group="default", consolidated=False) as ds:
         xr.testing.assert_identical(ds, dataset_exp)
         assert ds.chunks == chunks_exp
+
+
+def ingest(input_dir: Path, target_file: Path, layout: str) -> None:
+    layout_opts = {
+        "maps": "layout=maps",
+        "timeseries": "layout=timeseries",
+        "custom": 'zarr_chunk_shape={"time": 2, "lat": 1, "lon": 1}',
+    }
+    cmd = [
+        "ingest",
+        "girafe",
+        "--product-name",
+        "girafe",
+        "--input-data",
+        str(input_dir),
+        "--target",
+        f"file:///{target_file}",
+        "--write-mode",
+        "direct",
+        "--option",
+        layout_opts[layout],
+    ]
+    _call_firecube_cli(cmd)
+
+
+def _call_firecube_cli(cmd: list[str]) -> str:
+    runner = CliRunner()
+    res = runner.invoke(cli, cmd, catch_exceptions=False)
+    assert res.exit_code == 0
+    return res.output
+
+
+@pytest.mark.usefixtures("source_files")
+def test_delete_span(tmp_path: Path, target_file: Path):
+    """Test deleting an ingestion.
+
+    Given source files
+    When source files are ingested to the zarr cube
+    And the last ingestion is removed
+    Then the zarr cube is empty
+    """
+    ingest(tmp_path, target_file, layout="maps")
+    delete_span(target_file)
+    with xr.open_zarr(target_file, group="default", consolidated=False) as ds:
+        assert ds["precipitation"].isnull().all()
+
+
+def delete_span(target_file: Path) -> None:
+    cmd = [
+        "chunks",
+        "delete-span",
+        "--product-name",
+        f"file:///{target_file}",
+        "--run-id",
+        _get_run_id(target_file),
+        "--yes-i-really-mean-it",
+    ]
+    _call_firecube_cli(cmd)
+
+
+def _get_run_id(target_file: Path) -> str:
+    cmd = [
+        "chunks",
+        "list",
+        "--product-name",
+        f"file:///{target_file}",
+        "--include-span",
+        "-f",
+        "json",
+    ]
+    stdout = _call_firecube_cli(cmd)
+    records = json.loads(stdout)
+    return records[0]["meta"]["run_id"]
