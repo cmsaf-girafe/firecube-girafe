@@ -1,6 +1,7 @@
 # GIRAFE Firecube Plugin
 
-Ingest GIRAFE netCDF products into a zarr store using firecube. The plugin
+Ingest [GIRAFE](https://doi.org/10.5676/EUM_SAF_CM/GIRAFE/V001) netCDF products into
+a zarr store using [firecube](https://eumetsat.github.io/firecube/latest/). The plugin
 provides two chunk layouts optimized for timeseries (Spaghetti) and
 maps (Lasagna).
 
