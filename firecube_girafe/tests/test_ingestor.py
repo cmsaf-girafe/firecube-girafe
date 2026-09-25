@@ -289,10 +289,29 @@ def dataset_exp(dates):
     return ds
 
 
-@pytest.mark.usefixtures("source_files")
-def test_ingest(tmp_path, target_file, dataset_exp):
-    runner = CliRunner()
-    cmd = [
+@pytest.fixture(params=["maps", "timeseries", "custom"])
+def layout(request):
+    return request.param
+
+
+@pytest.fixture
+def chunks_exp(layout):
+    chunks = {
+        "maps": {"time": (1, 1, 1, 1, 1), "lat": (2,), "lon": (2,), "nv": (2,)},
+        "timeseries": {"time": (5,), "lat": (2,), "lon": (2,), "nv": (2,)},
+        "custom": {"time": (2, 2, 1), "lat": (1, 1), "lon": (1, 1), "nv": (2,)},
+    }
+    return chunks[layout]
+
+
+@pytest.fixture
+def ingest_command(tmp_path, target_file, layout):
+    layout_opts = {
+        "maps": "layout=maps",
+        "timeseries": "layout=timeseries",
+        "custom": 'zarr_chunk_shape={"time": 2, "lat": 1, "lon": 1}',
+    }
+    return [
         "ingest",
         "girafe",
         "--product-name",
@@ -304,9 +323,23 @@ def test_ingest(tmp_path, target_file, dataset_exp):
         "--write-mode",
         "direct",
         "--option",
-        "layout=maps",
+        layout_opts[layout],
     ]
-    res = runner.invoke(cli, cmd, catch_exceptions=False)
+
+
+@pytest.mark.usefixtures("source_files")
+def test_zarr_ingestion(ingest_command, target_file, dataset_exp, chunks_exp):
+    """Test zarr ingestion.
+
+    Given source files
+    And chunk layout
+    When source files are ingested to the zarr cube
+    Then the zarr cube is identical to the original dataset
+    And the chunking matches the desired layout
+    """
+    runner = CliRunner()
+    res = runner.invoke(cli, ingest_command, catch_exceptions=False)
     assert res.exit_code == 0
     with xr.open_zarr(target_file, group="default", consolidated=False) as ds:
         xr.testing.assert_identical(ds, dataset_exp)
+        assert ds.chunks == chunks_exp
