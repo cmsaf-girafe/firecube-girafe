@@ -1,4 +1,7 @@
 # GIRAFE Firecube Plugin
+<p align="center">
+  <img src="doc/images/logo.png" alt="GIRAFE Firecube Plugin" width="125">
+</p>
 
 Ingest [GIRAFE](https://doi.org/10.5676/EUM_SAF_CM/GIRAFE/V001) netCDF products into
 a zarr store using [firecube](https://eumetsat.github.io/firecube/latest/). The plugin
