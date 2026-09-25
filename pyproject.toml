@@ -1,0 +1,35 @@
+[project]
+name = "firecube-girafe"
+version = "0.1.0"
+description = "Firecube ingestor plugin for GIRAFE"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Stephan Finkensieper", email = "stephan.finkesieper@dwd.de" }
+]
+dependencies = [
+    "firecube>=0.1.5",
+    "xarray",
+]
+
+[project.entry-points."firecube.plugins"]
+girafe = "firecube_girafe"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+  {include-group = "lint"},
+  {include-group = "test"},
+  "pre-commit",
+]
+test = [
+    "pytest",
+]
+lint = [
+    "ruff",
+    "mypy",
+]
