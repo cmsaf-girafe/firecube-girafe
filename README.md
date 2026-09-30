@@ -57,6 +57,6 @@ import xarray as xr
 with xr.open_zarr(
     "/output/girafe-timeseries.zarr", group="default", consolidated=False
 ) as ds:
-    res = ds.sel(lat=0, lon=0, method="nearest").mean("time")
+    res = ds.sel(lat=0, lon=0, method="nearest").compute()
     res["precipitation"].plot()
 ```
