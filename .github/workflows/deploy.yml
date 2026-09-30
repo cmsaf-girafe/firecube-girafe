@@ -1,18 +1,16 @@
 name: Deploy to PyPI
 
-on: [pull_request]
-# on:
-#   release:
-#     types:
-#       - published
+on:
+  release:
+    types:
+      - published
 
 jobs:
   pypi-publish:
     runs-on: ubuntu-latest
-    environment: pypi
-    #environment:
-    #  name: pypi
-    #  url: https://pypi.org/p/girafe-firecube
+    environment:
+     name: pypi
+     url: https://pypi.org/p/girafe-firecube
     permissions:
       id-token: write
     steps:
@@ -26,7 +24,5 @@ jobs:
           python -m build
 
       - name: Publish package to PyPI
-        #if: github.event.action == 'published'
+        if: github.event.action == 'published'
         uses: pypa/gh-action-pypi-publish@v1.14.2
-        with:
-          repository-url: https://test.pypi.org/legacy/
